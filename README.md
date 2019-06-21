@@ -43,3 +43,18 @@ version 2 or later. See the [COPYING][license] file for detalis.
 
 [bug-tracker]: https://gitlab.gnome.org/GNOME/mutter/issues
 [license]: COPYING
+##Adhitya's notes
+Build instructions
+```
+mkdir build &&
+cd build &&
+
+meson --prefix=/usr .. &&
+ninja
+```
+To install
+
+```
+ninja install
+
+```
