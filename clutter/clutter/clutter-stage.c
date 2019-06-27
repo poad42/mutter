@@ -120,6 +120,7 @@ struct _ClutterStagePrivate
   ClutterActor *key_focused_actor;
 
   GQueue *event_queue;
+  int event_emissions_per_redraw;
 
   ClutterStageHint stage_hints;
 
@@ -885,26 +886,16 @@ _clutter_stage_queue_event (ClutterStage *stage,
                             gboolean      copy_event)
 {
   ClutterStagePrivate *priv;
-  gboolean first_event;
   ClutterInputDevice *device;
 
   g_return_if_fail (CLUTTER_IS_STAGE (stage));
 
   priv = stage->priv;
 
-  first_event = priv->event_queue->length == 0;
-
   if (copy_event)
     event = clutter_event_copy (event);
 
   g_queue_push_tail (priv->event_queue, event);
-
-  if (first_event)
-    {
-      ClutterMasterClock *master_clock = _clutter_master_clock_get_default ();
-      _clutter_master_clock_start_running (master_clock);
-      _clutter_stage_schedule_update (stage);
-    }
 
   /* if needed, update the state of the input device of the event.
    * we do it here to avoid calling the same code from every backend
@@ -925,6 +916,18 @@ _clutter_stage_queue_event (ClutterStage *stage,
       _clutter_input_device_set_coords (device, sequence, event_x, event_y, stage);
       _clutter_input_device_set_state (device, event_state);
       _clutter_input_device_set_time (device, event_time);
+    }
+
+  if (priv->event_emissions_per_redraw == 0)
+    {
+      _clutter_stage_process_queued_events (stage);
+    }
+  else if (priv->event_queue->length == 1)
+    {
+      ClutterMasterClock *master_clock = _clutter_master_clock_get_default ();
+
+      _clutter_master_clock_start_running (master_clock);
+      _clutter_stage_schedule_update (stage);
     }
 }
 
@@ -952,6 +955,8 @@ _clutter_stage_process_queued_events (ClutterStage *stage)
 
   if (priv->event_queue->length == 0)
     return;
+
+  priv->event_emissions_per_redraw++;
 
   /* In case the stage gets destroyed during event processing */
   g_object_ref (stage);
@@ -1244,6 +1249,7 @@ _clutter_stage_do_update (ClutterStage *stage)
 
   /* reset the guard, so that new redraws are possible */
   priv->redraw_pending = FALSE;
+  priv->event_emissions_per_redraw = 0;
 
 #ifdef CLUTTER_ENABLE_DEBUG
   if (priv->redraw_count > 0)
